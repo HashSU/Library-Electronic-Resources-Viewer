@@ -1,0 +1,33 @@
+.footer {
+  background-color: #741010;
+  box-shadow: 0 10px 30px rgba(116, 16, 16, 0.1);
+  border-bottom: 1px solid rgba(255, 255, 255, 0.1);
+  color: #c9d1d9;
+  padding: 2rem;
+  margin-top: auto;
+}
+
+.footerContent {
+  text-align: center;
+  margin-bottom: 1rem;
+}
+
+.brand {
+  font-size: 1.1rem;
+  font-weight: 700;
+  color: #e2b96f;
+  margin-bottom: 0.5rem;
+}
+
+.subtext {
+  font-size: 0.9rem;
+  color: #FFFFFF;
+}
+
+.footerBottom {
+  text-align: center;
+  padding-top: 1rem;
+  border-top: 1px solid #2d2d4e;
+  font-size: 0.9rem;
+  color: #FFFFFF;
+}

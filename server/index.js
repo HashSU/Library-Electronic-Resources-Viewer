@@ -1,5 +1,6 @@
 const express = require('express')
 const dotenv = require('dotenv')
+const path = require('path')
 const cors = require('cors')
 const connectDB = require('./config/db')
 const authRoutes = require('./routes/auth')
@@ -9,16 +10,22 @@ const userRoutes = require('./routes/users')
 const statsRoutes = require('./routes/stats')
 const kohaRoutes = require('./routes/koha')
 
-dotenv.config()
+dotenv.config({ path: path.join(__dirname, '.env') })
 
 connectDB()
 
 const app = express()
 
-app.use(cors())
+app.use(cors({
+  origin: 'http://localhost:5173',
+  credentials: true,
+}))
+
 app.use(express.json())
 
-app.use('/api/auth', authRoutes)
+app.use('/uploads', express.static('uploads'))
+
+app.use('/api/auth', authRoutes) 
 app.use('/api/categories', categoryRoutes)
 app.use('/api/resources', resourceRoutes)
 app.use('/api/users', userRoutes)

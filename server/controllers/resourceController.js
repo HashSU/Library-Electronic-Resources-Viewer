@@ -42,15 +42,27 @@ const createResource = async (req, res) => {
   try {
     if (!req.file) return res.status(400).json({ message: 'No file uploaded' })
     const { title, author, type, category, description, typeFields, kohaItemId } = req.body
+
+    let parsedTypeFields = {}
+    if (typeFields) {
+      try {
+        parsedTypeFields = typeof typeFields === 'string' ? JSON.parse(typeFields) : typeFields
+      } catch {
+        parsedTypeFields = {}
+      }
+    }
+
+    const normalizedPath = req.file.path.replace(/\\/g, '/')
+
     const resource = await Resource.create({
       title,
       author,
       type,
-      category,
+      category: category || null,
       description,
-      typeFields: typeFields ? JSON.parse(typeFields) : {},
+      typeFields: parsedTypeFields,
       kohaItemId,
-      filePath: req.file.path,
+      filePath: normalizedPath,
       fileType: req.file.mimetype,
       uploadedBy: req.user._id
     })

@@ -7,7 +7,11 @@ const searchKoha = async (req, res) => {
     const kohaUser = process.env.KOHA_USER
     const kohaPass = process.env.KOHA_PASS
 
-    const credentials = Buffer.from(`${kohaUser}:${kohaPass}`).toString('base64')
+    if (!kohaUrl) {
+      return res.status(503).json({ message: 'Koha integration is not configured' })
+    }
+
+    const credentials = Buffer.from(`${kohaUser || ''}:${kohaPass || ''}`).toString('base64')
 
     const response = await fetch(
       `${kohaUrl}/api/v1/biblios?q=${encodeURIComponent(q)}`,
