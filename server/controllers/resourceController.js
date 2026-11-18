@@ -1,10 +1,16 @@
 const Resource = require('../models/Resource')
 const ViewEvent = require('../models/ViewEvent')
 const crypto = require('crypto')
+const fs = require('fs')
+const path = require('path')
 const config = require('../config/env')
 const { resolveStoredPath } = require('../utils/filePaths')
 const { serverError } = require('../utils/httpError')
+const { detectFileType, extensionMatches } = require('../utils/fileType')
+const { FOLDERS } = require('../middleware/upload')
 const { isString, isNonEmptyString, isObjectId, pick } = require('../utils/validate')
+
+const RESOURCE_TYPES = ['ebook', 'ethesis', 'ejournal']
 
 const getResources = async (req, res) => {
   try {
@@ -77,41 +83,72 @@ const streamResourceFile = async (req, res) => {
   }
 }
 
+const removeUploadedFile = (file) => {
+  if (file && file.path) fs.unlink(file.path, () => {})
+}
+
 const createResource = async (req, res) => {
   try {
     if (!req.file) return res.status(400).json({ message: 'No file uploaded' })
     const { title, author, type, category, description, typeFields, kohaItemId } = req.body
 
+    // Validate text fields; delete the already-saved file if anything is wrong
+    if (!isNonEmptyString(title) || !isNonEmptyString(author)) {
+      removeUploadedFile(req.file)
+      return res.status(400).json({ message: 'Title and author are required' })
+    }
+    if (!RESOURCE_TYPES.includes(type)) {
+      removeUploadedFile(req.file)
+      return res.status(400).json({ message: 'Invalid resource type' })
+    }
+    if (category && !isObjectId(category)) {
+      removeUploadedFile(req.file)
+      return res.status(400).json({ message: 'Invalid category' })
+    }
+
+    // Check the real file type from its content, not just the extension
+    const detected = detectFileType(req.file.path)
+    if (!extensionMatches(path.extname(req.file.originalname), detected)) {
+      removeUploadedFile(req.file)
+      return res.status(400).json({ message: 'File content does not match its extension' })
+    }
+
     let parsedTypeFields = {}
     if (typeFields) {
       try {
-        parsedTypeFields = typeof typeFields === 'string' ? JSON.parse(typeFields) : typeFields
+        const parsed = typeof typeFields === 'string' ? JSON.parse(typeFields) : typeFields
+        if (parsed && typeof parsed === 'object' && !Array.isArray(parsed)) parsedTypeFields = parsed
       } catch {
         parsedTypeFields = {}
       }
     }
 
-    const normalizedPath = req.file.path.replace(/\\/g, '/')
+    // Stored as "uploads/<folder>/<filename>" (relative; resolved against UPLOAD_DIR when served)
+    const storedPath = path.posix.join('uploads', FOLDERS[type], req.file.filename)
 
-    const resource = await Resource.create({
-      title,
-      author,
-      type,
-      category: category || null,
-      description,
-      typeFields: parsedTypeFields,
-      kohaItemId,
-      filePath: normalizedPath,
-      fileType: req.file.mimetype,
-      uploadedBy: req.user._id
-    })
+    let resource
+    try {
+      resource = await Resource.create({
+        title: title.trim(),
+        author: author.trim(),
+        type,
+        category: category || null,
+        description: isString(description) ? description : '',
+        typeFields: parsedTypeFields,
+        kohaItemId: isString(kohaItemId) ? kohaItemId : undefined,
+        filePath: storedPath,
+        fileType: detected.mime,
+        uploadedBy: req.user._id
+      })
+    } catch (err) {
+      removeUploadedFile(req.file) // do not leave an orphan file behind
+      throw err
+    }
     res.status(201).json(resource)
   } catch (error) {
-    res.status(500).json({ message: error.message })
+    serverError(res, error, 'createResource')
   }
 }
-
-const RESOURCE_TYPES = ['ebook', 'ethesis', 'ejournal']
 
 // Only these fields can be changed through the update endpoint.
 // filePath, fileType, viewCount, uploadedBy etc. can never be set from the request.
