@@ -1,6 +1,8 @@
 const Resource = require('../models/Resource')
 const ViewEvent = require('../models/ViewEvent')
 const crypto = require('crypto')
+const { serverError } = require('../utils/httpError')
+const { isString, isNonEmptyString, isObjectId, pick } = require('../utils/validate')
 
 const getResources = async (req, res) => {
   try {
@@ -72,17 +74,61 @@ const createResource = async (req, res) => {
   }
 }
 
+const RESOURCE_TYPES = ['ebook', 'ethesis', 'ejournal']
+
+// Only these fields can be changed through the update endpoint.
+// filePath, fileType, viewCount, uploadedBy etc. can never be set from the request.
+const UPDATABLE_RESOURCE_FIELDS = [
+  'title', 'author', 'type', 'category', 'description', 'typeFields', 'kohaItemId', 'isActive'
+]
+
 const updateResource = async (req, res) => {
   try {
+    if (!isObjectId(req.params.id)) return res.status(404).json({ message: 'Resource not found' })
+
+    const updates = pick(req.body, UPDATABLE_RESOURCE_FIELDS)
+
+    if ('title' in updates && !isNonEmptyString(updates.title)) {
+      return res.status(400).json({ message: 'Invalid title' })
+    }
+    if ('author' in updates && !isNonEmptyString(updates.author)) {
+      return res.status(400).json({ message: 'Invalid author' })
+    }
+    if ('type' in updates && !RESOURCE_TYPES.includes(updates.type)) {
+      return res.status(400).json({ message: 'Invalid resource type' })
+    }
+    if ('category' in updates) {
+      if (updates.category === '' || updates.category === null) {
+        updates.category = null
+      } else if (!isObjectId(updates.category)) {
+        return res.status(400).json({ message: 'Invalid category' })
+      }
+    }
+    if ('description' in updates && !isString(updates.description)) {
+      return res.status(400).json({ message: 'Invalid description' })
+    }
+    if ('kohaItemId' in updates && !isString(updates.kohaItemId)) {
+      return res.status(400).json({ message: 'Invalid kohaItemId' })
+    }
+    if ('typeFields' in updates) {
+      const tf = updates.typeFields
+      if (!tf || typeof tf !== 'object' || Array.isArray(tf)) {
+        return res.status(400).json({ message: 'Invalid typeFields' })
+      }
+    }
+    if ('isActive' in updates && typeof updates.isActive !== 'boolean') {
+      return res.status(400).json({ message: 'Invalid isActive value' })
+    }
+
     const resource = await Resource.findByIdAndUpdate(
       req.params.id,
-      req.body,
-      { new: true }
+      { $set: updates },
+      { new: true, runValidators: true }
     )
     if (!resource) return res.status(404).json({ message: 'Resource not found' })
     res.json(resource)
   } catch (error) {
-    res.status(500).json({ message: error.message })
+    serverError(res, error, 'updateResource')
   }
 }
 
