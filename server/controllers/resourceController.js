@@ -1,6 +1,8 @@
 const Resource = require('../models/Resource')
 const ViewEvent = require('../models/ViewEvent')
 const crypto = require('crypto')
+const config = require('../config/env')
+const { resolveStoredPath } = require('../utils/filePaths')
 const { serverError } = require('../utils/httpError')
 const { isString, isNonEmptyString, isObjectId, pick } = require('../utils/validate')
 
@@ -15,6 +17,7 @@ const getResources = async (req, res) => {
       { author: { $regex: q, $options: 'i' } }
     ]
     const resources = await Resource.find(filter)
+      .select('-filePath')
       .populate('category', 'name')
       .sort({ createdAt: -1 })
     res.json(resources)
@@ -26,6 +29,7 @@ const getResources = async (req, res) => {
 const getResource = async (req, res) => {
   try {
     const resource = await Resource.findById(req.params.id)
+      .select('-filePath')
       .populate('category', 'name')
     if (!resource || !resource.isActive) {
       return res.status(404).json({ message: 'Resource not found' })
@@ -37,6 +41,39 @@ const getResource = async (req, res) => {
     res.json(resource)
   } catch (error) {
     res.status(500).json({ message: error.message })
+  }
+}
+
+// Streams the document file. Files are never served as public static files;
+// every read goes through this route so access rules can be enforced here
+// (access policies are added in a later phase). Range requests (needed by PDF
+// viewers) are handled by res.sendFile.
+const streamResourceFile = async (req, res) => {
+  try {
+    if (!isObjectId(req.params.id)) return res.status(404).json({ message: 'Resource not found' })
+
+    const resource = await Resource.findById(req.params.id).select('filePath isActive')
+    if (!resource || !resource.isActive) {
+      return res.status(404).json({ message: 'Resource not found' })
+    }
+
+    const absolutePath = resolveStoredPath(resource.filePath)
+    if (!absolutePath) return res.status(404).json({ message: 'File not found' })
+
+    // Allow only the React app to embed this file in an iframe
+    res.removeHeader('X-Frame-Options')
+    res.setHeader('Content-Security-Policy', `frame-ancestors 'self' ${config.CLIENT_ORIGIN}`)
+    res.setHeader('X-Content-Type-Options', 'nosniff')
+    res.setHeader('Content-Disposition', 'inline')
+    res.setHeader('Cache-Control', 'private, no-cache')
+
+    res.sendFile(absolutePath, { dotfiles: 'deny' }, (err) => {
+      if (err && !res.headersSent) {
+        res.status(err.statusCode === 416 ? 416 : 404).json({ message: 'File not found' })
+      }
+    })
+  } catch (error) {
+    serverError(res, error, 'streamResourceFile')
   }
 }
 
@@ -146,4 +183,4 @@ const deleteResource = async (req, res) => {
   }
 }
 
-module.exports = { getResources, getResource, createResource, updateResource, deleteResource }
+module.exports = { getResources, getResource, streamResourceFile, createResource, updateResource, deleteResource }

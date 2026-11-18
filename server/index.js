@@ -27,7 +27,8 @@ app.use(cors({
 
 app.use(express.json({ limit: '100kb' }))
 
-app.use('/uploads', express.static('uploads'))
+// Uploaded files are NOT served statically. They are streamed through
+// GET /api/resources/:id/file so access rules can be enforced.
 
 app.use('/api/auth', authRoutes) 
 app.use('/api/categories', categoryRoutes)
