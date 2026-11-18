@@ -58,21 +58,46 @@ const getResources = async (req, res) => {
   }
 }
 
+// Counts at most one view per visitor per resource per day. The visitor IP is
+// hashed with a secret salt (IP_HASH_SALT) so the stored value cannot be
+// reversed by trying every possible IPv4 address.
+const recordView = async (resourceId, ip) => {
+  try {
+    const ipHash = crypto.createHmac('sha256', config.IP_HASH_SALT).update(ip || 'unknown').digest('hex')
+    const day = new Date().toISOString().slice(0, 10)
+
+    const result = await ViewEvent.updateOne(
+      { resource: resourceId, ipHash, day },
+      { $setOnInsert: { resource: resourceId, ipHash, day } },
+      { upsert: true }
+    )
+    // Only a newly created event increments the counter, so the two never drift apart
+    if (result.upsertedCount > 0) {
+      await Resource.updateOne({ _id: resourceId }, { $inc: { viewCount: 1 } })
+    }
+  } catch (error) {
+    // A duplicate-key error means a parallel request already counted this view
+    if (error.code !== 11000) console.error('[error] recordView:', error)
+  }
+}
+
 const getResource = async (req, res) => {
   try {
+    if (!isObjectId(req.params.id)) return res.status(404).json({ message: 'Resource not found' })
+
     const resource = await Resource.findById(req.params.id)
       .select('-filePath')
       .populate('category', 'name')
     if (!resource || !resource.isActive) {
       return res.status(404).json({ message: 'Resource not found' })
     }
-    const ip = req.headers['x-forwarded-for'] || req.socket.remoteAddress
-    const ipHash = crypto.createHash('sha256').update(ip).digest('hex')
-    await ViewEvent.create({ resource: resource._id, ipHash })
-    await Resource.findByIdAndUpdate(req.params.id, { $inc: { viewCount: 1 } })
+
+    // req.ip honours the TRUST_PROXY setting, so X-Forwarded-For cannot be spoofed
+    // unless you have explicitly said a proxy is in front of the server.
+    await recordView(resource._id, req.ip)
     res.json(resource)
   } catch (error) {
-    res.status(500).json({ message: error.message })
+    serverError(res, error, 'getResource')
   }
 }
 
