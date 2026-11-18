@@ -53,4 +53,8 @@ const resourceSchema = new mongoose.Schema({
   }
 }, { timestamps: true })
 
+// Indexes for the common queries (browse by type/category, newest first, top viewed)
+resourceSchema.index({ isActive: 1, type: 1, category: 1, createdAt: -1 })
+resourceSchema.index({ isActive: 1, viewCount: -1 })
+
 module.exports = mongoose.model('Resource', resourceSchema)
