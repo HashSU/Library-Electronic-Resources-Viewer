@@ -3,6 +3,14 @@ const path = require('path')
 const fs = require('fs')
 const config = require('../config/env')
 
+// Errors that are safe to show to the client
+const clientError = (message, status = 400) => {
+  const err = new Error(message)
+  err.status = status
+  err.expose = true
+  return err
+}
+
 const FOLDERS = {
   ebook: 'ebooks',
   ethesis: 'etheses',
@@ -18,7 +26,7 @@ const storage = multer.diskStorage({
   destination: function (req, file, cb) {
     // NOTE: the form must send the "type" field BEFORE the file field (the admin upload page does)
     const folder = FOLDERS[req.body.type]
-    if (!folder) return cb(new Error('Invalid resource type'), '')
+    if (!folder) return cb(clientError('Invalid resource type'), '')
     cb(null, path.join(config.UPLOAD_DIR, folder))
   },
   filename: function (req, file, cb) {
@@ -33,7 +41,7 @@ const fileFilter = (req, file, cb) => {
   if (allowed.includes(ext)) {
     cb(null, true)
   } else {
-    cb(new Error('File type not allowed'), false)
+    cb(clientError('File type not allowed'), false)
   }
 }
 
