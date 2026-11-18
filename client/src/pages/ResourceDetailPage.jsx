@@ -1,7 +1,7 @@
 import { useState, useEffect } from 'react'
 import { useParams, Link } from 'react-router-dom'
 import { getResourceById } from '../services/resourceService'
-import { SERVER_URL } from '../services/api'
+import { API_URL } from '../services/api'
 import styles from './ResourceDetailPage.module.css'
 
 function ResourceDetailPage() {
@@ -91,7 +91,7 @@ function ResourceDetailPage() {
           <h2 className={styles.metaHeading}>Read Online</h2>
           <div className={styles.viewerBox}>
             <iframe
-              src={`${SERVER_URL}/${resource.filePath}`}
+              src={`${API_URL}/resources/${resource._id}/file`}
               title={resource.title}
               className={styles.iframe}
             />
