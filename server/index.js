@@ -1,6 +1,7 @@
 const config = require('./config/env')
 const express = require('express')
 const cors = require('cors')
+const helmet = require('helmet')
 const connectDB = require('./config/db')
 const authRoutes = require('./routes/auth')
 const categoryRoutes = require('./routes/categories')
@@ -13,12 +14,18 @@ connectDB()
 
 const app = express()
 
+// Only trust X-Forwarded-For when a known number of reverse proxies sit in front (TRUST_PROXY in .env)
+app.set('trust proxy', config.TRUST_PROXY)
+
+app.use(helmet())
+
 app.use(cors({
   origin: config.CLIENT_ORIGIN,
   credentials: true,
+  exposedHeaders: ['X-Total-Count'],
 }))
 
-app.use(express.json())
+app.use(express.json({ limit: '100kb' }))
 
 app.use('/uploads', express.static('uploads'))
 
