@@ -1,11 +1,15 @@
+const config = require('../config/env')
+const { serverError } = require('../utils/httpError')
+const { isNonEmptyString } = require('../utils/validate')
+
 const searchKoha = async (req, res) => {
   try {
     const { q } = req.query
-    if (!q) return res.status(400).json({ message: 'Search query required' })
+    if (!isNonEmptyString(q)) return res.status(400).json({ message: 'Search query required' })
 
-    const kohaUrl = process.env.KOHA_URL
-    const kohaUser = process.env.KOHA_USER
-    const kohaPass = process.env.KOHA_PASS
+    const kohaUrl = config.KOHA_URL
+    const kohaUser = config.KOHA_USER
+    const kohaPass = config.KOHA_PASS
 
     if (!kohaUrl) {
       return res.status(503).json({ message: 'Koha integration is not configured' })
@@ -19,7 +23,8 @@ const searchKoha = async (req, res) => {
         headers: {
           'Authorization': `Basic ${credentials}`,
           'Content-Type': 'application/json'
-        }
+        },
+        signal: AbortSignal.timeout(10000) // do not hang forever if Koha is down
       }
     )
 
@@ -30,7 +35,11 @@ const searchKoha = async (req, res) => {
     const data = await response.json()
     res.json(data)
   } catch (error) {
-    res.status(500).json({ message: error.message })
+    if (error && (error.name === 'TimeoutError' || error.name === 'AbortError')) {
+      console.error('[error] searchKoha: Koha request timed out')
+      return res.status(504).json({ message: 'Koha did not respond in time' })
+    }
+    serverError(res, error, 'searchKoha')
   }
 }
 

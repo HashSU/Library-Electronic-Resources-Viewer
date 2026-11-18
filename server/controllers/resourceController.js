@@ -259,6 +259,8 @@ const updateResource = async (req, res) => {
 
 const deleteResource = async (req, res) => {
   try {
+    if (!isObjectId(req.params.id)) return res.status(404).json({ message: 'Resource not found' })
+
     const resource = await Resource.findByIdAndUpdate(
       req.params.id,
       { isActive: false },
@@ -267,7 +269,7 @@ const deleteResource = async (req, res) => {
     if (!resource) return res.status(404).json({ message: 'Resource not found' })
     res.json({ message: 'Resource removed' })
   } catch (error) {
-    res.status(500).json({ message: error.message })
+    serverError(res, error, 'deleteResource')
   }
 }
 
