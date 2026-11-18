@@ -8,27 +8,53 @@ const { resolveStoredPath } = require('../utils/filePaths')
 const { serverError } = require('../utils/httpError')
 const { detectFileType, extensionMatches } = require('../utils/fileType')
 const { FOLDERS } = require('../middleware/upload')
-const { isString, isNonEmptyString, isObjectId, pick } = require('../utils/validate')
+const { isString, isNonEmptyString, isObjectId, pick, escapeRegex } = require('../utils/validate')
 
 const RESOURCE_TYPES = ['ebook', 'ethesis', 'ejournal']
+
+// Query params: type, category, q (search), page (default 1), limit (default/max 500).
+// The total number of matches is returned in the X-Total-Count header.
+const MAX_PAGE_SIZE = 500
 
 const getResources = async (req, res) => {
   try {
     const { type, category, q } = req.query
     const filter = { isActive: true }
-    if (type) filter.type = type
-    if (category) filter.category = category
-    if (q) filter.$or = [
-      { title: { $regex: q, $options: 'i' } },
-      { author: { $regex: q, $options: 'i' } }
-    ]
+
+    if (type !== undefined && type !== '') {
+      if (!isString(type) || !RESOURCE_TYPES.includes(type)) {
+        return res.status(400).json({ message: 'Invalid type filter' })
+      }
+      filter.type = type
+    }
+    if (category !== undefined && category !== '') {
+      if (!isObjectId(category)) return res.status(400).json({ message: 'Invalid category filter' })
+      filter.category = category
+    }
+    if (q !== undefined && q !== '') {
+      if (!isString(q)) return res.status(400).json({ message: 'Invalid search query' })
+      const safe = escapeRegex(q.trim().slice(0, 100)) // user input is never used as a raw regex
+      filter.$or = [
+        { title: { $regex: safe, $options: 'i' } },
+        { author: { $regex: safe, $options: 'i' } }
+      ]
+    }
+
+    const limit = Math.min(Math.max(parseInt(req.query.limit, 10) || MAX_PAGE_SIZE, 1), MAX_PAGE_SIZE)
+    const page = Math.max(parseInt(req.query.page, 10) || 1, 1)
+
+    const total = await Resource.countDocuments(filter)
     const resources = await Resource.find(filter)
       .select('-filePath')
       .populate('category', 'name')
       .sort({ createdAt: -1 })
+      .skip((page - 1) * limit)
+      .limit(limit)
+
+    res.set('X-Total-Count', String(total))
     res.json(resources)
   } catch (error) {
-    res.status(500).json({ message: error.message })
+    serverError(res, error, 'getResources')
   }
 }
 
