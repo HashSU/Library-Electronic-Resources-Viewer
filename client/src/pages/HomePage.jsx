@@ -1,7 +1,7 @@
 import { useState, useEffect } from 'react'
 import { useNavigate, Link } from 'react-router-dom'
 import { getCategories } from '../services/categoryService'
-import { getStatsOverview } from '../services/statsService'
+import { getPublicStats } from '../services/statsService'
 import styles from './HomePage.module.css'
 
 function HomePage() {
@@ -23,7 +23,7 @@ function HomePage() {
         setLoading(true)
         const [cats, statsData] = await Promise.all([
           getCategories().catch(() => []),
-          getStatsOverview().catch(() => null)
+          getPublicStats().catch(() => null)
         ])
         setCategories(cats || [])
         if (statsData) {
